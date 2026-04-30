@@ -232,7 +232,7 @@ To minimize this case but also respect the Reporting API V1 principle, we propos
 1. The user tries again later, and the navigation succeeds. The server responds with: Reporting-Endpoints: telemetry="https://example.com/reporting-endpoint"
 1. Now that a valid document and endpoint exist, the browser flushes both the old failure reports and current reports from the buffer to that endpoint at the timing of session termination.
 
-![High-level workflow how entries are managed](https://github.com/user-attachments/assets/cd7bde5e-ad34-4faa-b070-4bd068934642)
+![High-level workflow how entries are managed](https://github.com/user-attachments/assets/9bef3710-0535-4f5b-9953-bce8851bac2e)
 
 By doing that, we can report network errors while respecting the Reporting API's current principle. As a tradeoff, if the user never returns to the site, the failure report is lost, but this might still capture the vast majority of failures. Also, to keep the memory and disk usage limited, the browser should have some quota. **Note that we have the `capture-early-failures directive` for the opt-in signal. By default, we don't persist events.**
 
