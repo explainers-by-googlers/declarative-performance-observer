@@ -1,24 +1,15 @@
-# Explainer for the TODO API
+# Explainer for the Declarative Performance Observer
 
-**Instructions for the explainer author: Search for "todo" in this repository and update all the
-instances as appropriate. For the instances in `index.bs`, update the repository name, but you can
-leave the rest until you start the specification. Then delete the TODOs and this block of text.**
-
-This proposal is an early design sketch by [TODO: team] to describe the problem below and solicit
+This proposal is an early design sketch by the Chrome loading team to describe the problem below and solicit
 feedback on the proposed solution. It has not been approved to ship in Chrome.
-
-TODO: Fill in the whole explainer template below using https://tag.w3.org/explainers/ as a
-reference. Look for [brackets].
 
 ## Proponents
 
-- [Proponent team 1]
-- [Proponent team 2]
-- [etc.]
+- Shunya Shishido (sisidovski@chromium.org)
 
 ## Participate
-- https://github.com/explainers-by-googlers/[your-repository-name]/issues
-- [Discussion forum]
+
+- Discussion: [Issue tracker on GitHub](https://github.com/explainers-by-googlers/declarative-performance-observer/issues)
 
 ## Table of Contents [if the explainer is longer than one printed page]
 
@@ -51,20 +42,23 @@ reference. Look for [brackets].
 
 ## Introduction
 
-[The "executive summary" or "abstract".
-Explain in a few sentences what the goals of the project are,
-and a brief overview of how the solution works.
-This should be no more than 1-2 paragraphs.]
+This proposal aims to fill a gap in web observability regarding the full lifecycle of user journeys in scenarios where current APIs have limited visibility. Existing APIs, such as PerformanceObserver in JavaScript, are inherently bound to the execution environment of the page. Consequently, some early abandoned navigations or failures are not captured:
+
+1. **JavaScript Dependency:** If a navigation fails early (e.g., DNS timeout, connection refused), no JavaScript runs, and the site remains unaware of the failure, making it impossible to calculate accurate success rates for user journeys.
+1. **Reporting Reliability:** Existing methods to ensure all telemetry data is sent before a page disappears are complex and often unreliable. Beacons sent during abrupt terminations (like renderer crashes or tab closures on mobile) are often lost.
+
+Currently, the web platform does not allow websites to reliably record user journeys from navigation start to page close. This document proposes the **Declarative Performance Observer**, a browser-based telemetry system activated via a declarative HTTP Response Header. It instructs the browser to capture performance metrics and application events out-of-band and report them reliably at session termination via the Reporting API.
 
 ## Goals
 
-[What is the **end-user need** which this project aims to address? Make this section short, and
-elaborate in the Use cases section.]
+- Capture end-to-end user journey events from the navigation start to the page close without relying on JavaScript execution.
+- Capture custom application-defined events during the page lifecycle.
+- Automatically and reliably dispatch a consolidated report of these events when the session ends, surviving renderer crashes and early network failures.
 
 ## Non-goals
 
-[If there are "adjacent" goals which may appear to be in scope but aren't,
-enumerate them here. This section may be fleshed out as your design progresses and you encounter necessary technical and other trade-offs.]
+- Replacing the JavaScript PerformanceObserver API.
+- Replacing existing APIs to report errors, e.g., Network Error Logging or Crash Reporting API.
 
 ## User research
 
@@ -73,113 +67,134 @@ discuss the process and findings. User research should be more common than it is
 
 ## Use cases
 
-[Describe in detail what problems end-users are facing, which this project is trying to solve. A
-common mistake in this section is to take a web developer's or server operator's perspective, which
-makes reviewers worry that the proposal will violate [RFC 8890, The Internet is for End
-Users](https://www.rfc-editor.org/rfc/rfc8890).]
+### Use case 1: Detecting Early Network Failures
 
-### Use case 1
+A web application needs to know how many users attempt to visit a critical page but fail due to DNS errors or TLS negotiation timeouts before any payload is delivered. Because JavaScript never loads, traditional analytics miss 100% of these users. While Network Error Logging (NEL) can capture network errors, it lacks the ability to correlate these failures with the full application context or specific user journeys.
 
-### Use case 2
+### Use case 2: Measuring Application Journeys Terminated by OOM Crashes
 
-<!-- In your initial explainer, you shouldn't be attached or appear attached to any of the potential
-solutions you describe below this. -->
+Pages routinely suffer from Out-Of-Memory (OOM) crashes on low-end mobile devices. Traditional unload or pagehide beaconing fails because the OS terminates the process abruptly. The developer needs to see the sequence of performance events (e.g., FCP, LCP, or custom marks) immediately preceding the crash to debug the cause.
 
-## [Potential Solution]
+### Use case 3: Reliable Session End Recording
 
-[For each related element of the proposed solution - be it an additional JS method, a new object, a new element, a new concept etc., create a section which briefly describes it.]
+A developer wants to accurately track the total time a user spends on a page. While pagehide events can handle this in many cases, they may fail to run during abrupt terminations or crashes, leaving the session end time invisible.
 
-```js
-// Provide example code - not IDL - demonstrating the design of the feature.
+## Potential Solution
 
-// If this API can be used on its own to address a user need,
-// link it back to one of the scenarios in the goals section.
+We propose a new declarative HTTP Response Header: Performance-Observer. This header integrates with the Reporting API.
 
-// If you need to show how to get the feature set up
-// (initialized, or using permissions, etc.), include that too.
+### Syntax
+
+```
+Performance-Observer: report-to="telemetry"; entry-types=("navigation" "mark" "visibility-state"); include-user-timing=("hero-image-loaded" "next-link-clicked"); capture-early-failures=true
+Reporting-Endpoints: telemetry="https://log.com/v1"
 ```
 
-[Where necessary, provide links to longer explanations of the relevant pre-existing concepts and API.
-If there is no suitable external documentation, you might like to provide supplementary information as an appendix in this document, and provide an internal link where appropriate.]
+- **report-to:** Routes the payload to the designated endpoint defined in Reporting-Endpoints.
+- **entry-types:** Indicates which built-in performance events or visibility events should be recorded (e.g., "navigation", "mark", "visibility-state", matching [PerformanceObserver.supportedEntryTypes](https://w3c.github.io/performance-timeline/#supportedentrytypes-attribute)).
+- **include-user-timing:** Specifies an allowlist of user-defined performance.mark() events to sync to the browser.
+- **capture-early-failures:** A boolean directive. If enabled, the browser persists an origin-level flag to record future early navigation failures.
 
-[If this is already specced, link to the relevant section of the spec.]
+### Report Format
 
-[If spec work is in progress, link to the PR or draft of the spec.]
+The payload is a JSON array of reports, delivered via the Reporting API (**application/reports+json**). Each report contains an entries array with [PerformanceEntry](https://w3c.github.io/performance-timeline/#performanceentry) objects.
 
-[If you have more potential solutions in mind, add ## Potential Solution 2, 3, etc. sections.]
+When network errors or early abandons happen before the response is complete, they are reported as synthesized [PerformanceNavigationTiming](https://w3c.github.io/navigation-timing/#sec-PerformanceNavigationTiming) entries within the entries array. Milestones that were not reached (e.g., domainLookupEnd, responseStart, loadEventEnd) will be set to 0 to indicate where the failure occurred.
+
+### Report Timing (Session Termination)
+
+The browser automatically finalizes and dispatches the compiled report payload upon detecting critical lifecycle terminal events:
+
+- Tab Closure / Navigation Away
+- BFCache Entry
+- Early Errors (e.g., network errors)
+- Renderer Crash
 
 ### How this solution would solve the use cases
 
-[If there are a suite of interacting APIs, show how they work together to solve the use cases described.]
-
-#### Use case 1
-
-[Description of the end-user scenario]
-
-```js
-// Sample code demonstrating how to use these APIs to address that scenario.
-```
-
-#### Use case 2
-
-[etc.]
+- **Use case 1 (Early Network Failures):** By using the `capture-early-failures` directive, the browser remembers the origin's intent to record performance. On subsequent navigations, if a network error occurs before the response is received, the browser records the failure as an incomplete `PerformanceNavigationTiming` entry and saves it to a persistent buffer. This report is flushed on the next successful navigation to the same origin.
+- **Use case 2 (OOM Crashes):** As events occur, they are streamed to the browser process. If the renderer crashes, the browser process still holds the accumulated payload and safely flushes it to the network.
+- **Use case 3 (Session End Recording)**: The browser directly observes renderer termination and tab closures, automatically finalizing the report at the exact moment the session ends, without relying on JS execution.
 
 ## Detailed design discussion
 
-### [Tricky design choice #1]
+### Deferred Reporting for Early Failures
 
-[Talk through the tradeoffs in coming to the specific design point you want to make.]
+Reporting API V1 is designed to be ephemeral and tied to a single document response. This means endpoint info does not outlive the document lifecycle. To report network errors that happen before receiving a response, we persist the report data in an internal buffer and flush it when a valid document and endpoint exist in a future successful navigation. Note that we have the `capture-early-failures directive` for the opt-in signal. By default, we don't persist events.
 
-```js
-// Illustrated with example code.
-```
+### Explicit `PerformanceSessionEndTiming` vs spec minimalism
 
-[This may be an open question,
-in which case you should link to any active discussion threads.]
-
-### [Tricky design choice 2]
-
-[etc.]
+We considered not defining the `PerformanceSessionEndTiming` (or "session-end-event") bookend to keep the API surface minimal and avoid adding a new type to the web platform specification. However, without it, we would lose the ability to measure the precise total duration of the session (dwell time after the last recorded event). Since the goal is to measure the life of a user journey from end-to-end, we decided to keep this explicit terminal event to provide accurate duration metrics.
 
 ## Considered alternatives
 
-[This should include as many alternatives as you can,
-from high level architectural decisions down to alternative naming choices.]
+Before arriving at the proposed design, several existing systems and alternative API shapes were evaluated:
 
-### [Alternative 1]
+### Network Error Logging (NEL)
 
-[Describe an alternative which was considered,
-and why you decided against it.]
+NEL provides a mechanism for collecting client-side network errors via an HTTP response header, capturing early failures before JS execution. However, NEL is strictly scoped to network errors. We need a solution that captures the entire end-to-end events (network timings, page visibility, and user-defined application marks), not just network errors. Also, NEL depends on the Reporting API V0, which is already deprecated.
 
-### [Alternative 2]
+### ServiceWorker
 
-[etc.]
+ServiceWorkers can intercept network requests and observe closures, enabling end-to-end recording. However, adopting ServiceWorker introduces new complexity and performance overhead.
+
+### Combination of Existing Technologies (NEL + JS PerformanceObserver + fetchLater() + Renderer Crash Reporting)
+
+One might consider stitching together existing APIs: using NEL to catch early network failures, JS `PerformanceObserver` to record performance events, `fetchLater` to guarantee beacon transmission when the page closes, and Renderer Crash Reporting to capture crashes. However, this fragmented approach fails to meet the requirements because NEL only captures network-level errors, while fetchLater and JS Performance APIs require the JavaScript environment to be successfully initialized. If the user closes the tab after the network response but before JS executes and registers the fetchLater beacon, the failure is completely invisible. Furthermore, NEL reports are generated independently by the network stack and have a fundamentally different structure than JS-generated beacons. There is no reliable way to correlate a NEL failure report with an intended application journey on the server side to calculate accurate success rates.
+
+### Extend performance.mark() instead of include-user-timing
+
+This alternative allows developers to specify which events are recorded via JavaScript by extending markOptions in the performance.mark() API. One concern is that any third-party scripts can set this option as well.
 
 ## Security and Privacy Considerations
 
-[Describe any interesting answers you give to the [Security and Privacy Self-Review
-Questionnaire](https://www.w3.org/TR/security-privacy-questionnaire/) and any interesting ways that
-your feature interacts with [Chromium's Web Platform Security
-Guidelines](https://chromium.googlesource.com/chromium/src/+/master/docs/security/web-platform-security-guidelines.md).]
+For Security and Privacy considerations, please check [self-review questionnaires]() as well.
+
+### Denial of Service (DoS) Prevention (Memory)
+
+To prevent malicious scripts from spamming performance events and causing an Out-Of-Memory (OOM) crash in the browser process, the API enforces a strict **640KB buffer size limit per document** lifecycle. If the buffer fills, newest incoming entries are silently dropped, preserving critical early-load metrics. This protects the privileged browser process from memory exhaustion.
+
+### Disk Quota for Buffered Reports (Storage DoS)
+
+The `capture-early-failures` feature requires persisting failure reports to disk when no active endpoint is available. To prevent a malicious site from filling the user's disk by repeatedly triggering failed navigations, the browser must enforce a strict disk quota for these buffered reports (both per-origin and globally). Reports exceeding the quota should be dropped following a FIFO (First-In, First-Out) or similar eviction policy.
+
+
+### Safe API Design and Telemetry Hijacking
+
+The API is activated exclusively via declarative HTTP response headers, not through a JavaScript API. This prevents third-party scripts (such as malicious ads or trackers) from arbitrarily activating performance observation on a page without the origin's explicit server-side consent.
+
+Also, this API is strictly limited to **first-party activation**. The API is driven by HTTP response headers on the main document navigation. It is primarily intended for first-party use. Third-party resources cannot trigger these reports for the main document.
+
+### Telemetry Pollution by Third-Party Scripts
+
+While third-party scripts cannot activate the feature or modify the list of allowed marks, they can still call performance.mark() with names that are listed in the header's include-user-timing. If they do so, they could potentially pollute the telemetry data.
+
+**Mitigation:** Origins should use specific, non-generic names for their critical performance marks to reduce the risk of accidental or intentional collision by third-party scripts. Future iterations could consider restricting mark capture to scripts originating from the same origin, though this adds complexity.
+
+### Timer Resolution and Side-Channels
+
+Time-based fields in the report are subject to standard clock resolution limits (coarsening) applied to high-resolution timers in the web platform. This mitigates the risk of using these reports as high-precision timers for side-channel attacks such as Spectre.
+
+### Reporting Endpoint Security
+
+The API relies on the infrastructure of the Reporting API for report delivery. The primary protection is isolation: reports generated for a document are only sent to the endpoints explicitly configured by that document's headers. This prevents unintentional data leakage. Note that if multiple origins choose to share the same reporting endpoint, that endpoint can correlate user activity across those sites (similar to sharing third-party analytics scripts), as noted in the Reporting API specification.
+
+### Data Minimization and Opt-in
+
+The API follows data minimization principles by only collecting entries explicitly requested by the developer via the entry-types and include-user-timing directives. The session-end event is anonymous and only contains the timestamp of the session end.
+
+### Cross-Site Correlation and Storage Partitioning
+
+Any state introduced by this API (such as the capture-early-failures flag and buffered failure reports) is stored in partitioned storage. It is isolated by the top-level site and cannot be used to link a user's activity across different sites. By default, events are not persisted unless the user opts in via capture-early-failures.
+
+### Incognito / Private Browsing Mode
+
+Persisted events and origin-level flags are isolated to partitioned storage and never leak between regular and Incognito modes. Data is purged when the Incognito profile is destroyed.
+
+### Crash Detection Heuristic vs. Explicit Field
+
+The proposal intentionally omits closure type details (such as whether the session ended due to a crash or a normal close) in the session-end event to adhere to privacy minimalism. However, as noted by reviewers, if the heuristic (inferring a crash from the absence of a visibility-state: hidden event before session end) is $100%$ reliable, it exposes equivalent information to an explicit field. This remains an active area of discussion with privacy teams to ensure the design meets privacy expectations.
 
 ## Stakeholder Feedback / Opposition
 
-[Implementors and other stakeholders may already have publicly stated positions on this work. If you can, list them here with links to evidence as appropriate.]
-
-- [Implementor A] : Positive
-- [Stakeholder B] : No signals
-- [Implementor C] : Negative
-
-[If appropriate, explain the reasons given by other implementors for their concerns.]
-
-## References & acknowledgements
-
-[Your design will change and be informed by many people; acknowledge them in an ongoing way! It helps build community and, as we only get by through the contributions of many, is only fair.]
-
-[Unless you have a specific reason not to, these should be in alphabetical order.]
-
-Many thanks for valuable feedback and advice from:
-
-- [Person 1]
-- [Person 2]
-- [etc.]
+TBD
