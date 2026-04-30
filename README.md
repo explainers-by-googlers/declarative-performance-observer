@@ -161,7 +161,7 @@ This alternative allows developers to specify which events are recorded via Java
 
 ## Security and Privacy Considerations
 
-For Security and Privacy considerations, please check [self-review questionnaires]() as well.
+For Security and Privacy considerations, please check [self-review questionnaires](https://github.com/explainers-by-googlers/declarative-performance-observer/blob/main/security_privacy_questionnaire_answers.md) as well.
 
 ### Denial of Service (DoS) Prevention (Memory)
 
