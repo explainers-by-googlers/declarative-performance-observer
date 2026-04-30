@@ -109,103 +109,149 @@ Reporting-Endpoints: telemetry="https://log.com/v1"
 - **include-user-timing:** Specifies an allowlist of user-defined `performance.mark()` or `performance.measure()` events to sync to the browser.
 - **capture-early-failures:** A boolean directive. If enabled, the browser persists an origin-level flag to record future early navigation failures.
 
-### Report Format
+### Activation Timing
 
-The payload is a JSON array of reports, delivered via the Reporting API (**application/reports+json**). Each report contains an `entries` array with [PerformanceEntry](https://w3c.github.io/performance-timeline/#performanceentry) objects.
-
-When network errors or early abandons happen before the response is complete, they are reported as synthesized [PerformanceNavigationTiming](https://w3c.github.io/navigation-timing/#sec-PerformanceNavigationTiming) entries within the entries array. Milestones that were not reached (e.g., domainLookupEnd, responseStart, loadEventEnd) will be set to `0` to indicate where the failure occurred.
-
-Note: CORS preflight requests are not exposed independently in reports, aligning with `PerformanceResourceTiming`.
-
-### Example Report Payload
-
-Here is an example of the entire response payload sent to the reporting endpoint. The sample submission contains two reports bundled together in a single HTTP request.
-
-```
-  POST / HTTP/1.1
-  Host: telemetry.example.com
-  Content-Type: application/reports+json
-  
-  [
-    {
-      "type": "performance-observer",
-      "age": 1000,
-      "url": "https://www.example.com/first",
-      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-      "body": {
-        "entries": [
-          {
-            "name": "https://www.example.com/first",
-            "entryType": "navigation",
-            "startTime": 0,
-            "domainLookupStart": 50,
-            // DNS error happened, all subsequent fields are zeroed out.
-            "domainLookupEnd": 0,
-            "connectStart": 0,
-            "responseStart": 0
-          },
-          {
-            "name": "session-end-event",
-            "entryType": "session-end",
-            "startTime": 50,
-            "duration": 0
-          }
-        ]
-      }
-    },
-    {
-      "type": "performance-observer",
-      "age": 100,
-      "url": "https://www.example.com/second",
-      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-      "body": {
-        "entries": [
-          {
-            "name": "https://www.example.com/second",
-            "entryType": "navigation",
-            "startTime": 0,
-            "domainLookupStart": 68,
-            "domainLookupEnd": 120,
-            "connectStart": 122,
-            "secureConnectionStart": 160,
-            "requestStart": 196,
-            "responseStart": 562,
-            "activationStart": 0
-          },
-          {
-            "name": "hero-image-loaded",
-            "entryType": "mark",
-            "startTime": 780,
-            "duration": 0,
-            // https://w3c.github.io/user-timing/#performancemarkoptions-detail
-            "detail": { "additionalinfo": "user defined arbitrary data" }
-          },
-          {
-            "name": "hidden",
-            "entryType": "visibility-state",
-            "startTime": 13870,
-            "duration": 0
-          },
-          {
-            "name": "session-end-event",
-            "entryType": "session-end",
-            "startTime": 240200,
-            "duration": 0
-          }
-        ]
-      }
-    }
-  ]
-```
+Developers can let browsers report performance timeline events by sending Performance-Observer via HTTP response headers for navigations. Once the browser receives the header, it internally collects PerformanceNavigationTiming events and user other performance entries specified via entry-types until the session ends.
 
 ### Report Timing (Session Termination)
 
 The browser automatically finalizes and dispatches the compiled report payload upon detecting critical lifecycle terminal events:
 
-- Tab Closure / Navigation Away
-- BFCache Entry
-- Early Errors (e.g., network errors)
-- Renderer Crash
+- Tab Closure / Navigation Away: User leaves the page or navigates to a new page.
+- BFCache Entry:  Page enters the back/forward cache. If restored, a new session automatically begins.
+- Early Errors: E.g., network errors.
+- Renderer Crash: E.g., OS OOM kills.
+
+### Report Format
+
+The payload is a JSON array of reports, delivered via the Reporting API (**application/reports+json**). Each report contains an `entries` array with objects, extending [PerformanceEntry](https://w3c.github.io/performance-timeline/#performanceentry).
+
+Here is the high-level reporting format.
+
+```
+POST / HTTP/1.1
+Host: telemetry.example.com
+Content-Type: application/reports+json
+
+[{
+  "type": "performance-observer",
+  "age": 10,
+  "url": "https://example.com/foo",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36'"
+  "body": {
+    "entries": [
+      PerformanceNavigationTiming,
+      PerformanceMark,
+      PerformanceMark,
+      VisibilityStateEntry,
+      ...
+      PerformanceSessionEndTiming, // We define this as a new PerformanceEntry type.
+    ]
+  }
+}]
+```
+
+To explicitly flag a session boundary, we’ll define the new struct, **PerformanceSessionEndTiming** (inheriting from `PerformanceEntry`). This entry doesn’t reveal any closure type details, except for `start_time`.
+
+Each time based fields are subject to https://w3c.github.io/hr-time/#clock-resolution.
+
+### Example Report Payload
+
+Here is an example of the entire response payload sent to the reporting endpoint. The sample payload contains two reports bundled together in a single HTTP request.
+
+```
+[
+  {
+    "type": "performance-observer",
+    "age": 1000,
+    "url": "https://www.example.com/first",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+    "body": {
+      "entries": [
+        {
+          "name": "https://www.example.com/first",
+          "entryType": "navigation",
+          "startTime": 0,
+          "domainLookupStart": 50,
+          // DNS error happened, all subsequent fields are zeroed out.
+          "domainLookupEnd": 0,
+          "connectStart": 0,
+          "responseStart": 0
+        },
+        {
+          "name": "session-end-event",
+          "entryType": "session-end",
+          "startTime": 50,
+          "duration": 0
+        }
+      ]
+    }
+  },
+  {
+    "type": "performance-observer",
+    "age": 100,
+    "url": "https://www.example.com/second",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+    "body": {
+      "entries": [
+        {
+          "name": "https://www.example.com/second",
+          "entryType": "navigation",
+          "startTime": 0,
+          "domainLookupStart": 68,
+          "domainLookupEnd": 120,
+          "connectStart": 122,
+          "secureConnectionStart": 160,
+          "requestStart": 196,
+          "responseStart": 562,
+          "activationStart": 0
+        },
+        {
+          "name": "hero-image-loaded",
+          "entryType": "mark",
+          "startTime": 780,
+          "duration": 0,
+          "detail": { "additionalinfo": "user defined arbitrary data" }
+        },
+        {
+          "name": "hidden",
+          "entryType": "visibility-state",
+          "startTime": 13870,
+          "duration": 0
+        },
+        {
+          "name": "session-end-event",
+          "entryType": "session-end",
+          "startTime": 240200,
+          "duration": 0
+        }
+      ]
+    }
+  }
+]
+```
+
+When network errors or early abandons happen before the response is complete, they are reported as synthesized [PerformanceNavigationTiming](https://w3c.github.io/navigation-timing/#sec-PerformanceNavigationTiming) entries within the entries array. Milestones that were not reached (e.g., domainLookupEnd, responseStart, loadEventEnd) will be set to `0` to indicate where the failure occurred.
+
+Developers can set arbitrary information via the [detail](https://w3c.github.io/user-timing/#performancemarkoptions-detail) property in `performance.mark()`.
+
+```js
+performance.mark("user-timing-event", {detail: {additional_info: 12345}});
+// This is sent as below format.
+{
+  "name": "user-timing-mark",
+  "entryType": "mark",
+  "startTime": 780,
+  "duration": 0,
+  "detail": {"additional_info": 12345}
+}
+```
+
+### Deactivation
+
+The browser sends a report at the page close timing, it doesn't outlive the document. The browser deactivate once logs are reported. Logs are not stored, persisted, and reported if there is no header.
+
+One exception is `capture-early-failures` directive, since this information is stored as the origin-level flag. If this flag is set, any early navigation failures (e.g. network error) under the origin are persisted. Sending capture-early-failures=false will disable the flag.
 
 ### How this solution would solve the use cases
 
