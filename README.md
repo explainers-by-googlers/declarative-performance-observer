@@ -215,9 +215,26 @@ The browser automatically finalizes and dispatches the compiled report payload u
 
 ## Detailed design discussion
 
-### Deferred Reporting for Early Failures
+### Deferred Reporting for Early Failures (capture-early-failures)
 
-Reporting API V1 is designed to be ephemeral and tied to a single document response. This means endpoint info does not outlive the document lifecycle. To report network errors that happen before receiving a response, we persist the report data in an internal buffer and flush it when a valid document and endpoint exist in a future successful navigation. **Note that we have the `capture-early-failures directive` for the opt-in signal. By default, we don't persist events.**
+For the very first navigation to a site, events are reported if the browser successfully receives the response header because it’s activated via the `Performance-Observer` response header. If a network error occurs before receiving the response, the browser wouldn't know how to track it.
+
+To solve this, the Performance-Observer has the `capture-early-failures` directive. If enabled, from the next navigation, the browser will collect early navigation failures as `PerformanceNavigationTiming` entries happening before receiving the response, and persist them to the storage. 
+
+However, when the browser doesn’t receive the `Reporting-Endpoints` header, it’s impossible to send the report. Because Reporting API V1 is designed to be ephemeral, and tied to a  document response. This means the endpoint info doesn’t outlive the document lifecycle, thus not available from the navigation start until response received.
+
+To minimize this case but also respect the Reporting API V1 principle, we propose a deferred reporting approach. Specifically, we don't persist the reporting endpoint. Instead, we persist report data if the report is not available to be sent.
+
+**How it works:**
+
+1. The user navigates to your site, and it fails due to a DNS error etc.
+1. The browser process records the failure and saves the report data in its internal persistent buffer.
+1. The user tries again later, and the navigation succeeds. The server responds with: Reporting-Endpoints: telemetry="https://example.com/reporting-endpoint"
+1. Now that a valid document and endpoint exist, the browser flushes both the old failure reports and current reports from the buffer to that endpoint at the timing of session termination.
+
+![High-level workflow how entries are managed](https://github.com/user-attachments/assets/cd7bde5e-ad34-4faa-b070-4bd068934642)
+
+By doing that, we can report network errors while respecting the Reporting API's current principle. As a tradeoff, if the user never returns to the site, the failure report is lost, but this might still capture the vast majority of failures. Also, to keep the memory and disk usage limited, the browser should have some quota. **Note that we have the `capture-early-failures directive` for the opt-in signal. By default, we don't persist events.**
 
 ### Explicit `PerformanceSessionEndTiming` vs spec minimalism
 
