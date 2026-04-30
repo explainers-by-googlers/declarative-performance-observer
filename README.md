@@ -121,7 +121,7 @@ Note: CORS preflight requests are not exposed independently in reports, aligning
 
 Here is an example of the entire response payload sent to the reporting endpoint. The sample submission contains two reports bundled together in a single HTTP request.
 
-```http
+```
   POST / HTTP/1.1
   Host: telemetry.example.com
   Content-Type: application/reports+json
@@ -139,10 +139,10 @@ Here is an example of the entire response payload sent to the reporting endpoint
             "entryType": "navigation",
             "startTime": 0,
             "domainLookupStart": 50,
+            // DNS error happened, all subsequent fields are zeroed out.
             "domainLookupEnd": 0,
             "connectStart": 0,
             "responseStart": 0
-            // DNS error happened, all subsequent fields are zeroed out.
           },
           {
             "name": "session-end-event",
@@ -177,6 +177,7 @@ Here is an example of the entire response payload sent to the reporting endpoint
             "entryType": "mark",
             "startTime": 780,
             "duration": 0,
+            // https://w3c.github.io/user-timing/#performancemarkoptions-detail
             "detail": { "additionalinfo": "user defined arbitrary data" }
           },
           {
