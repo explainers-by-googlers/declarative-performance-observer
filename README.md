@@ -20,7 +20,6 @@ feedback on the proposed solution. It has not been approved to ship in Chrome.
 - [Introduction](#introduction)
 - [Goals](#goals)
 - [Non-goals](#non-goals)
-- [User research](#user-research)
 - [Use cases](#use-cases)
   - [Use case 1: Detecting Early Network Failures](#use-case-1-detecting-early-network-failures)
   - [Use case 2: Measuring Application Journeys Terminated by OOM Crashes](#use-case-2-measuring-application-journeys-terminated-by-oom-crashes)
@@ -75,11 +74,6 @@ Currently, the web platform does not allow websites to reliably record user jour
 
 - Replacing the JavaScript `PerformanceObserver` API.
 - Replacing existing APIs to report errors, e.g., [Network Error Logging](https://www.w3.org/TR/network-error-logging/) or Crash Reporting.
-
-## User research
-
-[If any user research has been conducted to inform your design choices,
-discuss the process and findings. User research should be more common than it is.]
 
 ## Use cases
 
