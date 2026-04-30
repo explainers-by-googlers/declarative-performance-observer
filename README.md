@@ -347,7 +347,3 @@ Any state introduced by this API (such as the capture-early-failures flag and bu
 ### Incognito / Private Browsing Mode
 
 Persisted events and origin-level flags are isolated to partitioned storage and never leak between regular and Incognito modes. Data is purged when the Incognito profile is destroyed.
-
-### Crash Detection Heuristic vs. Explicit Field
-
-The proposal intentionally omits closure type details (such as whether the session ended due to a crash or a normal close) in the session-end event to adhere to privacy minimalism. However, as noted by reviewers, if the heuristic (inferring a crash from the absence of a visibility-state: hidden event before session end) is $100%$ reliable, it exposes equivalent information to an explicit field. This remains an active area of discussion with privacy teams to ensure the design meets privacy expectations.
