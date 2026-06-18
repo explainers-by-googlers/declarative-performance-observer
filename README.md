@@ -62,6 +62,8 @@ This proposal aims to fill a gap in web observability regarding the full lifecyc
 1. **Reporting Reliability:** Existing methods to ensure all telemetry data is sent before a page disappears are complex and often unreliable. Beacons sent during abrupt terminations (like renderer crashes or tab closures on mobile) are often lost.
 1. **End-of-Session Detection:** Sites cannot reliably detect when a user leaves a page. `unload` handlers are deprecated because they break BFCache, and on mobile OSs, renderer processes are frequently killed under memory pressure without invoking any JavaScript handlers.
 
+![](https://github.com/user-attachments/assets/8ffaa012-8af0-473f-91a2-7a8d13e0a62c)
+
 Currently, the web platform does not allow websites to reliably record user journeys from navigation start to page close. This document proposes the **Declarative Performance Observer**, a browser-based telemetry system activated via a declarative HTTP Response Header. It instructs the browser to capture performance metrics and application events out-of-band and report them reliably at session termination via the [Reporting API](https://w3c.github.io/reporting).
 
 ## Goals
@@ -69,6 +71,10 @@ Currently, the web platform does not allow websites to reliably record user jour
 - Capture end-to-end user journey events from the navigation start to the page close without relying on JavaScript execution.
 - Capture custom application-defined events during the page lifecycle.
 - Automatically and reliably dispatch a consolidated report of these events when the session ends, surviving renderer crashes and early network failures.
+
+
+![](https://github.com/user-attachments/assets/a24c7b4e-9828-453c-9dbd-34063720f7b5)
+
 
 ## Non-goals
 
