@@ -102,7 +102,7 @@ We propose a new declarative HTTP Response Header: `Performance-Observer`. This 
 ### Syntax
 
 ```
-Performance-Observer: report-to="telemetry"; entry-types=("navigation" "mark" "visibility-state"); include-user-timing=("hero-image-loaded" "next-link-clicked"); capture-early-failures=true
+Performance-Observer: report-to="telemetry", entry-types=("navigation" "mark" "visibility-state"), include-user-timing=("hero-image-loaded" "next-link-clicked"), capture-early-failures=?1
 Reporting-Endpoints: telemetry="https://log.com/v1"
 ```
 
