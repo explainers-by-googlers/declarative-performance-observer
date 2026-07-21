@@ -320,13 +320,26 @@ To prevent malicious scripts from spamming performance events and causing an Out
 
 The `capture-early-failures` feature requires persisting failure reports to disk when no active endpoint is available. To prevent a malicious site from filling the user's disk by repeatedly triggering failed navigations, the browser must enforce a strict **disk quota** for these buffered reports. Reports exceeding the quota should be dropped following a FIFO (First-In, First-Out) policy.
 
-The spec will state that the user agent SHOULD enforce a disk quota for buffered reports, leaving the exact size implementation-defined.
+The spec will state that the user agent SHOULD enforce a disk quota for buffered reports, leaving the exact size implementation-defined. In Chromium, this is limited to **640KB** globally per storage partition (typically corresponding to a user profile).
+
+### Data Retention and Expiration
+
+To enforce data minimization principles, cached data has specific lifetime limits:
+
+- **Failure Reports:** Persisted failure reports are ephemeral and, in Chromium, **expire after 7 days**. The browser periodically cleans up reports older than this threshold (e.g., during database initialization on startup). They are also deleted immediately once successfully retrieved and sent to the reporting endpoint.
+- **Origin-level Opt-in Flag:** The opt-in flag indicating whether the origin has enabled `capture-early-failures` also **expires after 7 days** in Chromium. The browser cleans up expired policies on database initialization. Otherwise, it persists until:
+  1. The origin explicitly opts out by serving a response header with `capture-early-failures=false`.
+  2. The user manually clears their site settings or browsing data for the origin.
+
+- **Interaction with User Clearing Site Data:** Both the persistent failure reports and the origin-level opt-in flags are fully integrated with the browser's data clearing mechanisms. They are purged when a `Clear-Site-Data` HTTP response header (supporting `"storage"`) is served by the origin, as well as when the user manually clears their site settings, cookies, or browsing data for the origin (or clears all history) through the browser UI. The corresponding entries are immediately removed from both the in-memory cache and the SQLite database on disk.
+
 
 ### Safe API Design and Telemetry Hijacking
 
 The API is activated exclusively via declarative HTTP response headers, not through a JavaScript API. This prevents third-party scripts (such as malicious ads or trackers) from arbitrarily activating performance observation on a page without the origin's explicit server-side consent.
 
-Also, this API is strictly limited to **first-party activation**. The API is driven by HTTP response headers on the main document navigation. It is primarily intended for first-party use. Third-party resources cannot trigger these reports for the main document.
+Also, this API is strictly limited to **first-party activation**. The API is driven by HTTP response headers on the main document navigation (top-level main frame). It is primarily intended for first-party use. Third-party resources (such as iframe documents or subresource requests) cannot trigger or activate these reports for the main document.
+
 
 ### Telemetry Pollution by Third-Party Scripts
 
@@ -341,6 +354,13 @@ Time-based fields in the report are subject to standard clock resolution limits 
 ### Reporting Endpoint Security
 
 The API relies on the infrastructure of the Reporting API for report delivery. The primary protection is isolation: reports generated for a document are only sent to the endpoints explicitly configured by that document's headers. This prevents unintentional data leakage. Note that if multiple origins choose to share the same reporting endpoint, that endpoint can correlate user activity across those sites (similar to sharing third-party analytics scripts), as noted in the Reporting API specification.
+
+### Network Leakage and Network Changes
+
+To prevent leaking information about a user's past browsing activity on a sensitive network to a new network they connect to later (e.g., home network vs. corporate network), this API inherits the Reporting API's network leakage prevention principles:
+
+- **Discarding Reports on Network Change:** As defined in the [Reporting API specification (Section 3.6)](https://w3c.github.io/reporting/#network-leakage), any buffered reports pending transmission are discarded when the user agent detects a network interface change.
+- **Trade-off:** Reports from failed navigations or crashes that occurred just before a network switch (e.g., closing a laptop on a train network and opening it at home) will be dropped and not reported.
 
 ### Data Minimization and Opt-in
 
