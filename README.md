@@ -355,6 +355,14 @@ Time-based fields in the report are subject to standard clock resolution limits 
 
 The API relies on the infrastructure of the Reporting API for report delivery. The primary protection is isolation: reports generated for a document are only sent to the endpoints explicitly configured by that document's headers. This prevents unintentional data leakage. Note that if multiple origins choose to share the same reporting endpoint, that endpoint can correlate user activity across those sites (similar to sharing third-party analytics scripts), as noted in the Reporting API specification.
 
+### Network Leakage and Network Changes
+
+This API inherits the W3C Reporting API's principles for preventing network leakage (leaking past browsing history across different network interfaces):
+
+- **In-Memory Reports Discarded on Network Change:** As defined in the [Reporting API specification (Section 3.6)](https://w3c.github.io/reporting/#network-leakage), any in-memory buffered reports currently queued for transmission in the network service are discarded immediately when a network interface change is detected. This prevents the new network from observing report delivery traffic for past sessions.
+- **Persisted Failure Reports Retained:** Reports stored persistently on disk (under the `capture-early-failures` directive) are not automatically deleted on network change. However, these reports are only retrieved and transmitted when the user successfully navigates to the same origin again on the new network.
+  - Since a transmission is only triggered by an active, successful navigation to the target origin, the new network already observes the user's connection to that origin. Therefore, transmitting the historic failure report does not expose any new hostnames to the new network.
+
 ### Data Minimization and Opt-in
 
 The API follows data minimization principles by only collecting entries explicitly requested by the developer via the entry-types and include-user-timing directives. The session-end event is anonymous and only contains the timestamp of the session end.
