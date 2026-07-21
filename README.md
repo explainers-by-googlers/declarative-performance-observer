@@ -355,6 +355,13 @@ Time-based fields in the report are subject to standard clock resolution limits 
 
 The API relies on the infrastructure of the Reporting API for report delivery. The primary protection is isolation: reports generated for a document are only sent to the endpoints explicitly configured by that document's headers. This prevents unintentional data leakage. Note that if multiple origins choose to share the same reporting endpoint, that endpoint can correlate user activity across those sites (similar to sharing third-party analytics scripts), as noted in the Reporting API specification.
 
+### Network Leakage and Network Changes
+
+To prevent leaking information about a user's past browsing activity on a sensitive network to a new network they connect to later (e.g., home network vs. corporate network), this API inherits the Reporting API's network leakage prevention principles:
+
+- **Discarding Reports on Network Change:** As defined in the [Reporting API specification (Section 3.6)](https://w3c.github.io/reporting/#network-leakage), any buffered reports pending transmission are discarded when the user agent detects a network interface change.
+- **Trade-off:** Reports from failed navigations or crashes that occurred just before a network switch (e.g., closing a laptop on a train network and opening it at home) will be dropped and not reported.
+
 ### Data Minimization and Opt-in
 
 The API follows data minimization principles by only collecting entries explicitly requested by the developer via the entry-types and include-user-timing directives. The session-end event is anonymous and only contains the timestamp of the session end.
