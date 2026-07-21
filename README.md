@@ -331,7 +331,7 @@ To enforce data minimization principles, cached data has specific lifetime limit
   1. The origin explicitly opts out by serving a response header with `capture-early-failures=false`.
   2. The user manually clears their site settings or browsing data for the origin.
 
-- **Interaction with User Clearing Site Data:** Both the persistent failure reports and the origin-level opt-in flags are fully integrated with the browser's data clearing mechanisms. They are purged when a `Clear-Site-Data` HTTP response header (supporting `"storage"` or `"cookies"`) is served by the origin, as well as when the user manually clears their site settings, cookies, or browsing data for the origin (or clears all history) through the browser UI. The corresponding entries are immediately removed from both the in-memory cache and the SQLite database on disk.
+- **Interaction with User Clearing Site Data:** Both the persistent failure reports and the origin-level opt-in flags are fully integrated with the browser's data clearing mechanisms. They are purged when a `Clear-Site-Data` HTTP response header (supporting `"storage"`) is served by the origin, as well as when the user manually clears their site settings, cookies, or browsing data for the origin (or clears all history) through the browser UI. The corresponding entries are immediately removed from both the in-memory cache and the SQLite database on disk.
 
 
 ### Safe API Design and Telemetry Hijacking
@@ -340,8 +340,6 @@ The API is activated exclusively via declarative HTTP response headers, not thro
 
 Also, this API is strictly limited to **first-party activation**. The API is driven by HTTP response headers on the main document navigation (top-level main frame). It is primarily intended for first-party use. Third-party resources (such as iframe documents or subresource requests) cannot trigger or activate these reports for the main document.
 
-- **No Third-Party Opt-In:** Third-party scripts or subframe documents cannot opt-in to `capture-early-failures` or trigger DPO telemetry caching.
-- **Origin-Scoped Caching:** The opt-in boolean and buffered failure reports are cached on a per-origin basis (keyed by the top-level document's `url::Origin`). They are stored in a database partition that aligns with the profile's storage partitioning, preventing cross-site leakage.
 
 ### Telemetry Pollution by Third-Party Scripts
 
