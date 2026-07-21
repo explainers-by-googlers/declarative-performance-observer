@@ -357,10 +357,11 @@ The API relies on the infrastructure of the Reporting API for report delivery. T
 
 ### Network Leakage and Network Changes
 
-To prevent leaking information about a user's past browsing activity on a sensitive network to a new network they connect to later (e.g., home network vs. corporate network), this API inherits the Reporting API's network leakage prevention principles:
+This API inherits the W3C Reporting API's principles for preventing network leakage (leaking past browsing history across different network interfaces):
 
-- **Discarding Reports on Network Change:** As defined in the [Reporting API specification (Section 3.6)](https://w3c.github.io/reporting/#network-leakage), any buffered reports pending transmission are discarded when the user agent detects a network interface change.
-- **Trade-off:** Reports from failed navigations or crashes that occurred just before a network switch (e.g., closing a laptop on a train network and opening it at home) will be dropped and not reported.
+- **In-Memory Reports Discarded on Network Change:** As defined in the [Reporting API specification (Section 3.6)](https://w3c.github.io/reporting/#network-leakage), any in-memory buffered reports currently queued for transmission in the network service are discarded immediately when a network interface change is detected. This prevents the new network from observing report delivery traffic for past sessions.
+- **Persisted Failure Reports Retained:** Reports stored persistently on disk (under the `capture-early-failures` directive) are not automatically deleted on network change. However, these reports are only retrieved and transmitted when the user successfully navigates to the same origin again on the new network.
+  - Since a transmission is only triggered by an active, successful navigation to the target origin, the new network already observes the user's connection to that origin. Therefore, transmitting the historic failure report does not expose any new hostnames to the new network.
 
 ### Data Minimization and Opt-in
 
